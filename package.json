@@ -1,0 +1,38 @@
+{
+	"name": "managebac-scraper",
+	"version": "1.0.0",
+	"description": "A simple ManageBac scraper, using Puppeteer",
+	"main": "build/index.js",
+	"scripts": {
+		"start": "npm run clear && nodemon",
+		"clear": "rimraf ./build"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/Jadie-Wadie/managebac-scraper.git"
+	},
+	"keywords": [],
+	"author": "",
+	"license": "ISC",
+	"bugs": {
+		"url": "https://github.com/Jadie-Wadie/managebac-scraper/issues"
+	},
+	"homepage": "https://github.com/Jadie-Wadie/managebac-scraper#readme",
+	"dependencies": {
+		"@types/node": "^14.0.13",
+		"@types/puppeteer": "^3.0.0",
+		"dotenv": "^8.2.0",
+		"exceljs": "^4.0.1",
+		"puppeteer": "^3.3.0",
+		"rimraf": "^3.0.2",
+		"typescript": "^3.9.5",
+		"winston": "^3.2.1"
+	},
+	"nodemonConfig": {
+		"watch": [
+			"src"
+		],
+		"ext": "ts",
+		"exec": "tsc && node -r dotenv/config ."
+	}
+}
