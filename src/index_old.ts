@@ -50,8 +50,6 @@ const args = parseArgs([
 	show: boolean;
 };
 
-// if (args.url === undefined) return logger.error();
-
 // Logger
 const logger = winston.createLogger({
 	format: winston.format.cli(),

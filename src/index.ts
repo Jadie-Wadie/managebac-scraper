@@ -7,7 +7,7 @@ import parseArgs from 'command-line-args';
 import { resolve } from 'path';
 
 import Excel from 'exceljs';
-import puppeteer, { Browser } from 'puppeteer';
+import puppeteer, { Page } from 'puppeteer';
 
 // Logger
 const logger = winston.createLogger({
@@ -23,7 +23,7 @@ const logger = winston.createLogger({
 function readArguments() {
 	// Parse
 	const args = parseArgs([
-		{ name: 'url', type: (str: string) => `https://${str}/` },
+		{ name: 'url' },
 		{ name: 'email' },
 		{ name: 'pass' },
 		{
@@ -48,14 +48,7 @@ function readArguments() {
 }
 
 // Login
-async function login(browser: Browser, { url, email, pass }: Args) {
-	// Load URL
-	const page = (await browser.pages())[0];
-	await page.goto(`${url}login`, {
-		waitUntil: 'domcontentloaded'
-	});
-
-	// Login to ManageBac
+async function login(page: Page, { email, pass }: Args) {
 	await page.type('#session_login', email);
 	await page.type('#session_password', pass);
 
@@ -66,8 +59,7 @@ async function login(browser: Browser, { url, email, pass }: Args) {
 }
 
 // Get Subjects
-async function getSubjects(browser: Browser) {
-	const page = (await browser.pages())[0];
+async function getSubjects(page: Page) {
 	return await page.evaluate(() => {
 		// Menu
 		const menu = document.getElementById('menu');
@@ -94,6 +86,32 @@ async function getSubjects(browser: Browser) {
 	});
 }
 
+// Get Grades
+async function getGrades(page: Page, url: string, subject: Parsed.Subject) {
+	// Find Term 1
+	await page.goto(`${url}${subject.url}/core_tasks`);
+	const term = await page.evaluate(() => {
+		return document
+			.getElementById('term')
+			.getElementsByTagName('optgroup')[0]
+			.getElementsByTagName('option')[0].value;
+	});
+	await page.goto(`${url}${subject.url}/core_tasks?term=${term}`);
+
+	// Get Raw Data
+	const data: Raw.Task[] = JSON.parse(
+		await page.evaluate(() => {
+			return document
+				.getElementById('term-set-chart-container')
+				.getElementsByTagName('div')[0]
+				.getAttribute('data-series');
+		})
+	);
+
+	// Grade Type
+	let type: 'N' | 'L';
+}
+
 // Main
 (async function () {
 	try {
@@ -102,20 +120,31 @@ async function getSubjects(browser: Browser) {
 		logger.info(`url: ${args.url.yellow}`);
 		logger.info(`file: ${args.file.yellow}`);
 
-		// Launch
+		args.url = `https://${args.url}`;
+
+		// Launch and Load
 		const browser = await puppeteer.launch({
 			headless: !args.show,
 			defaultViewport: null
 		});
 		logger.debug('browser running');
 
+		const page = (await browser.pages())[0];
+		await page.goto(`${args.url}/login`, {
+			waitUntil: 'domcontentloaded'
+		});
+
 		// Log In
-		await login(browser, args);
+		await login(page, args);
 		logger.debug('logged in');
 
 		// Get Subjects
-		let subjects = await getSubjects(browser);
-		console.log(subjects);
+		let subjects = await getSubjects(page);
+
+		// Get Grades
+		for (let i = 0; i < subjects.length; i++) {
+			let subject = await getGrades(page, args.url, subjects[i]);
+		}
 
 		// Close
 		await browser.close();
