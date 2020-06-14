@@ -24,11 +24,11 @@ npm start -- --url=school.managebac.com --email=example@school.edu --pass=secret
 
 | Argument | Description                           | Required | Default       |
 | -------- | ------------------------------------- | -------- | ------------- |
-| url      | The URL of the account to scrape      | [x]      |               |
-| email    | The email of the account to scrape    | [x]      |               |
-| pass     | The password of the account to scrape | [x]      |               |
-| file     | The name of the spreadsheet           | [ ]      | `export.xlsm` |
-| show     | Tell puppeteer to run in a window     | [ ]      | `false`       |
+| url      | The URL of the account to scrape      | yes      |               |
+| email    | The email of the account to scrape    | yes      |               |
+| pass     | The password of the account to scrape | yes      |               |
+| file     | The name of the spreadsheet           | no       | `export.xlsm` |
+| show     | Tell puppeteer to run in a window     | no       | `false`       |
 
 ## License
 
