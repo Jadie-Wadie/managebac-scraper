@@ -98,7 +98,7 @@ const logger = winston.createLogger({
 	);
 
 	// Get Subject Grades
-	let maxSACE: number = 0;
+	let maxSACE = 0;
 	for (let i = 0; i < subjects.length; i++) {
 		const subject = subjects[i];
 
@@ -156,12 +156,14 @@ const logger = winston.createLogger({
 							value: rawGrade.y
 						}
 					];
+
 					subject.type = 'IB';
 				} else {
 					grade = {
 						name: labels[rawGrade],
 						value: rawGrade
 					};
+
 					subject.type = 'SACE';
 				}
 			}
@@ -239,15 +241,41 @@ const logger = winston.createLogger({
 		}
 	}
 
-	// Style Worksheets
-	[sheetIB, sheetSACE].forEach(sheet => {
+	// Summary Sheet
+	const sheetSum = workbook.addWorksheet('Summary', {
+		views: [{ state: 'frozen', ySplit: 1 }]
+	});
+	sheetSum.columns = [
+		{ header: 'Name', key: 'name' },
+		{ header: 'Tasks', key: 'tasks' },
+		{ header: 'Average', key: 'avg' }
+	];
+
+	const rowIB = sheetSum.addRow({
+		name: 'IB',
+		tasks: { formula: '=COUNTA(IB!A:A)-1' },
+		avg: { formula: '=AVERAGE(IB!C:F)' }
+	});
+	rowIB.getCell('avg').numFmt = '0.00';
+
+	const rowSACE = sheetSum.addRow({
+		name: 'SACE',
+		tasks: { formula: '=COUNTA(SACE!A:A)-1' },
+		avg: { formula: '=AVERAGE(SACE!D:D)' }
+	});
+	rowSACE.getCell('avg').numFmt = '0.00';
+
+	// Autofit Columns
+	[sheetIB, sheetSACE, sheetSum].forEach(sheet => {
 		sheet.eachColumnKey(column => {
 			let width = Math.max(column.width, column.header.length);
 
 			column.eachCell(cell => {
 				let string = (cell.value ?? '').toString();
+
 				if (string.match(/\d+.\d+/))
 					string = parseFloat(string).toFixed(2);
+				if (cell.formula !== undefined) string = '0';
 
 				width = Math.max(width, string.length);
 			});
