@@ -8,42 +8,32 @@ declare global {
 		show: boolean;
 	}
 
-	// Parsed Data
-	namespace Parsed {
-		export interface Subject {
-			name: string;
-			url: string;
-
-			tasks: Task[];
-		}
-
-		export interface Task {
-			name: string;
-			grades: Grade[];
-		}
-
-		export interface Grade {
-			name?: string;
-			value: number | string;
-		}
+	// Parsed
+	interface Subject {
+		name: string;
+		type?: 'IB' | 'SACE';
+		url: string;
+		tasks: Task[];
 	}
 
-	// Raw Data
-	namespace Raw {
-		export interface Task {
+	interface Task {
+		name: string;
+		grade: Grade | Grade[];
+	}
+
+	interface Grade {
+		name: string;
+		value: number;
+	}
+
+	// Raw
+	type DataSeries = [
+		{
+			data: ({ name: string; y: number } | number)[];
 			name: string;
 			color: string;
-
-			data: Grade[];
 		}
-
-		export type Grade =
-			| {
-					name: string;
-					y: number;
-			  }
-			| number;
-	}
+	];
 }
 
 export {};
