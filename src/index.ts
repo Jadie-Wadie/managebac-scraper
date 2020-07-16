@@ -1,13 +1,13 @@
 // Imports
 import 'colors';
 
+import { existsSync, readFileSync } from 'fs';
+
 import winston from 'winston';
 import parseArgs from 'command-line-args';
 
-import { resolve } from 'path';
-
-import Excel from 'exceljs';
-import puppeteer from 'puppeteer';
+import puppeteer, { Page } from 'puppeteer';
+import Excel, { Workbook, Worksheet } from 'exceljs';
 
 // Logger
 const logger = winston.createLogger({
@@ -20,86 +20,179 @@ const logger = winston.createLogger({
 });
 
 // Main
-(async function () {
-	// Parse
+async function main() {
+	// Args
 	const args = parseArgs([
-		{ name: 'url' },
-		{ name: 'email' },
-		{ name: 'pass' },
 		{
-			name: 'file',
-			defaultValue: 'export'
+			name: 'in',
+			type: str => `./${str}.json`,
+			defaultValue: './secret.json'
+		},
+		{
+			name: 'out',
+			type: str => `./${str}.xlsx`,
+			defaultValue: './export.xlsx'
 		},
 		{ name: 'show', type: Boolean, defaultValue: false }
 	]) as Args;
 
-	// Check Required
-	const required = ['url', 'email', 'pass'];
-	for (const arg of required) {
-		if (args[arg] === undefined)
-			throw new Error(
-				`${`--${arg}`.cyan} cannot be ${String(args[arg]).yellow}`
-			);
+	if (!existsSync(args.in))
+		return logger.error(new Error(`${args.in} does not exist`));
+
+	// JSON
+	let secret: Secret;
+	try {
+		secret = loadJSON(args.in, ['url', 'email', 'pass']);
+		secret.url = `https://${secret.url}`;
+	} catch (err) {
+		return logger.error(err);
 	}
 
-	// Generate URL
-	const url = `https://${args.url}`;
-	logger.info(`url: ${`${url}/`.cyan}`);
-
-	// Launch a Browser
+	// Start Puppeteer
 	const browser = await puppeteer.launch({
 		headless: !args.show,
 		defaultViewport: null
 	});
-	logger.info(`browser running`);
-
-	// Go to ManageBac
 	const page = (await browser.pages())[0];
-	await page.goto(`${url}/login`, {
+
+	// Login
+	try {
+		await login(page, secret);
+	} catch (err) {
+		return void logger.error(err) ?? (await browser.close());
+	}
+	logger.info(`logged in`);
+
+	// Subjects
+	let partials: Parsed.Partial[];
+	try {
+		partials = await getSubjects(page);
+		if (partials.length === 0) throw new Error('no subjects found');
+	} catch (err) {
+		return void logger.error(err) ?? (await browser.close());
+	}
+
+	// Grades
+	let subjects: Parsed.Subject[];
+	try {
+		subjects = await getGrades(page, secret, partials);
+	} catch (err) {
+		return void logger.error(err) ?? (await browser.close());
+	}
+
+	// Workbook
+	let criterion = 0;
+	for (const subject of subjects)
+		if (subject.type === 'number')
+			for (const task of subject.tasks)
+				criterion = Math.max(criterion, task.grades.length);
+
+	const workbook = createWorkbook(criterion);
+
+	// Export
+	exportNumbers(
+		workbook.getWorksheet('Number'),
+		subjects.filter(subject => subject.type === 'number') as Parsed.Number[]
+	);
+	exportLetters(
+		workbook.getWorksheet('Letter'),
+		subjects.filter(subject => subject.type === 'letter') as Parsed.Letter[]
+	);
+
+	// Summary
+	createSummary(workbook);
+
+	// Autofit
+	autofitColumns(workbook);
+
+	// Save
+	try {
+		await workbook.xlsx.writeFile(args.out);
+	} catch (err) {
+		return void logger.error(err) ?? (await browser.close());
+	}
+	logger.info('export complete');
+
+	// Close the Browser
+	await new Promise(r => setTimeout(r, 1000));
+	await browser.close();
+}
+main();
+
+// Load JSON
+function loadJSON(file: string, keys: string[]) {
+	const data = JSON.parse(readFileSync(file, 'utf8'));
+
+	for (const key of keys)
+		if (data[key] === undefined)
+			throw new Error(`${key.cyan} is ${String(undefined).yellow}`);
+
+	return data;
+}
+
+// Login
+async function login(page: Page, { url, email, pass }: Secret) {
+	// Navigate
+	await page.goto(url, {
 		waitUntil: 'domcontentloaded'
 	});
 
-	// Login Form
-	await page.type('#session_login', args.email);
-	await page.type('#session_password', args.pass);
+	// Form
+	try {
+		// Details
+		await page.type('#session_login', email);
+		await page.type('#session_password', pass);
 
-	await (await page.$('#session_form')).evaluate((form: HTMLFormElement) =>
-		form.submit()
-	);
-	await page.waitForNavigation();
-	logger.info('logged in');
+		// Submit
+		await (
+			await page.$('#session_form')
+		).evaluate((form: HTMLFormElement) => form.submit());
+		await page.waitForNavigation();
+	} catch (err) {
+		throw new Error('invalid url');
+	}
 
-	// Get Subjects
-	let subjects = await (await page.$('#menu')).evaluate(
-		(menu: HTMLUListElement) => {
-			// Get Subject List
-			const list = menu
-				.getElementsByClassName('js-menu-classes-list')[0]
-				.getElementsByTagName('ul')[0]
-				.getElementsByTagName('li');
+	// Success
+	if ((await page.$('#flash-area')) !== null)
+		throw new Error('invalid credentials');
+}
 
-			// Get Subject URLs
-			const subjects: Subject[] = [];
-			for (let i = 0; i < list.length - 1; i++) {
-				const item = list.item(i).getElementsByTagName('a')[0];
-				subjects.push({
-					name: item.getElementsByTagName('span')[0].innerHTML,
-					url: item.getAttribute('href'),
-					tasks: []
-				});
-			}
+// Get Subjects
+async function getSubjects(page: Page) {
+	return await (await page.$('#menu')).evaluate((menu: HTMLUListElement) => {
+		// Subjects
+		const list = menu
+			.getElementsByClassName('js-menu-classes-list')[0]
+			.getElementsByTagName('ul')[0]
+			.getElementsByTagName('li');
 
-			// Return URLs
-			return subjects;
+		// URLs
+		const subjects: Parsed.Partial[] = [];
+		for (let i = 0; i < list.length - 1; i++) {
+			const item = list.item(i).getElementsByTagName('a')[0];
+			subjects.push({
+				name: item.getElementsByTagName('span')[0].innerHTML,
+				url: item.getAttribute('href')
+			});
 		}
-	);
 
-	// Get Subject Grades
-	let maxSACE = 0;
-	for (let i = 0; i < subjects.length; i++) {
-		const subject = subjects[i];
+		return subjects;
+	});
+}
 
-		// Term 1
+// Get Grades
+async function getGrades(
+	page: Page,
+	{ url }: Secret,
+	partials: Parsed.Partial[]
+) {
+	let subjects: Parsed.Subject[] = [];
+
+	for (const partial of partials) {
+		const subject: Partial<Parsed.Subject> = { ...partial };
+		logger.info(subject.name.cyan);
+
+		// First Term
 		await page.goto(`${url}${subject.url}/core_tasks`);
 		const term = await (await page.$('#term')).evaluate(
 			(select: HTMLSelectElement) => {
@@ -110,160 +203,188 @@ const logger = winston.createLogger({
 		);
 		await page.goto(`${url}${subject.url}/core_tasks?term=${term}`);
 
-		// Get Chart
-		const data: DataSeries = JSON.parse(
-			await page.evaluate(() => {
-				return document
-					.getElementById('term-set-chart-container')
-					.getElementsByTagName('div')[0]
-					.getAttribute('data-series');
-			})
-		);
-
-		// Get SACE Labels
-		const labels: {
-			[key: string]: string;
-		} =
-			JSON.parse(
+		// Chart Data
+		let data: Chart.Data;
+		try {
+			data = JSON.parse(
 				await page.evaluate(() => {
-					return document
+					const chart = document
 						.getElementById('term-set-chart-container')
-						.getElementsByTagName('div')[0]
-						.getAttribute('data-grade-labels');
+						.getElementsByTagName('div')[0];
+
+					let type: string, labels: string;
+					if (chart.hasAttribute('data-grade-labels')) {
+						type = 'letter';
+						labels = chart.getAttribute('data-grade-labels');
+					} else {
+						type = 'number';
+						labels = chart.getAttribute('data-criterion-labels');
+					}
+
+					let series = JSON.parse(chart.getAttribute('data-series'));
+
+					return JSON.stringify({
+						type,
+						labels: JSON.parse(labels),
+						series,
+						max: parseInt(chart.getAttribute('data-max-value'))
+					});
 				})
-			) ?? undefined;
-
-		if (labels !== undefined) {
-			const keys = Object.keys(labels);
-			maxSACE = parseInt(keys[keys.length - 1]);
+			);
+		} catch (err) {
+			logger.error(`download failed`);
+			continue;
 		}
 
-		// Populate Subject
-		for (const task of data) {
-			let grade: Grade | Grade[];
+		// Number or Letter
+		subject.type = data.type;
+		switch (subject.type) {
+			case 'number':
+				parseNumber(subject, data as Chart.Number);
+				break;
 
-			for (const key in task.data) {
-				const rawGrade = task.data[key];
-
-				if (typeof rawGrade !== 'number') {
-					grade = [
-						...((grade as Grade[]) ?? []),
-						{
-							name: rawGrade.name,
-							value: rawGrade.y
-						}
-					];
-
-					subject.type = 'IB';
-				} else {
-					grade = {
-						name: labels[rawGrade],
-						value: rawGrade
-					};
-
-					subject.type = 'SACE';
-				}
-			}
-
-			subject.tasks.push({
-				name: task.name,
-				grade
-			});
+			case 'letter':
+				parseLetter(subject, data as Chart.Letter);
+				break;
 		}
 
-		logger.info(`scraped ${subject.name.cyan} as ${subject.type.cyan}`);
+		subjects.push(subject as Parsed.Subject);
 	}
 
-	// Configure Excel
+	return subjects;
+}
+
+// Parse Number
+function parseNumber(subject: Partial<Parsed.Number>, data: Chart.Number) {
+	subject.tasks = [];
+
+	for (const entry of data.series) {
+		let grades: number[] = new Array(data.labels.length);
+
+		for (let i = 0; i < data.labels.length; i++)
+			grades[i] = entry.data.find(
+				grade => grade.name === data.labels[i]
+			)?.y;
+
+		subject.tasks.push({
+			name: entry.name,
+			grades
+		});
+	}
+
+	return subject as Parsed.Number;
+}
+
+// Parse Letter
+function parseLetter(subject: Partial<Parsed.Letter>, data: Chart.Letter) {
+	subject.tasks = [];
+
+	for (const entry of data.series) {
+		subject.tasks.push({
+			name: entry.name,
+			grade: [
+				data.labels[entry.data[0].toString()],
+				(entry.data[0] / data.max) * 100
+			]
+		});
+	}
+
+	return subject as Parsed.Letter;
+}
+
+// Create Workbook
+function createWorkbook(criteria: number) {
 	const workbook = new Excel.Workbook();
 	workbook.creator = 'ManageBac Scraper';
 
-	const sheetIB = workbook.addWorksheet('IB', {
+	const numberSheet = workbook.addWorksheet('Number', {
 		views: [{ state: 'frozen', ySplit: 1 }]
 	});
-	sheetIB.columns = [
+	numberSheet.columns = [
 		{ header: 'Subject', key: 'subject' },
 		{ header: 'Task', key: 'task' },
-		{ header: 'A', key: 'a' },
-		{ header: 'B', key: 'b' },
-		{ header: 'C', key: 'c' },
-		{ header: 'D', key: 'd' }
+		...Array.from(new Array(criteria), (_value, index) => ({
+			header: `Criterion ${String.fromCharCode(65 + index)}`,
+			key: `#${index}`
+		}))
 	];
 
-	const sheetSACE = workbook.addWorksheet('SACE', {
+	const letterSheet = workbook.addWorksheet('Letter', {
 		views: [{ state: 'frozen', ySplit: 1 }]
 	});
-	sheetSACE.columns = [
+	letterSheet.columns = [
 		{ header: 'Subject', key: 'subject' },
 		{ header: 'Task', key: 'task' },
-		{ header: 'Grade', key: 'grade' },
-		{ header: 'Percentage', key: 'percentage', width: 14.5 }
+		{ header: 'Letter', key: 'letter' },
+		{ header: 'Number', key: 'number', width: 14.5 }
 	];
 
-	// Export Data
+	return workbook;
+}
+
+// Export Numbers
+function exportNumbers(sheet: Worksheet, subjects: Parsed.Number[]) {
 	for (const subject of subjects) {
 		for (const task of subject.tasks) {
-			let row: Excel.Row;
-			if (subject.type! === 'IB') {
-				const temp = (task.grade as Grade[]).reduce(
-					(
-						total: {
-							[key: string]: number;
-						},
-						grade
-					) => ({
-						...total,
-						[grade.name.charAt(0).toLowerCase()]:
-							grade.value === -1 ? 'n/a' : grade.value
-					}),
-					{}
-				);
+			const data = { subject: subject.name, task: task.name };
 
-				row = sheetIB.addRow({
-					subject: subject.name,
-					task: task.name,
-					...temp
-				});
-			} else {
-				row = sheetSACE.addRow({
-					subject: subject.name,
-					task: task.name,
-					grade: (task.grade as Grade).name,
-					percentage: ((task.grade as Grade).value / maxSACE) * 100
-				});
-				row.getCell('percentage').numFmt = '0.00';
+			for (let i = 0; i < task.grades.length; i++) {
+				const grade = task.grades[i];
+				data[`#${i}`] = grade === -1 ? 'n/a' : grade;
 			}
 
+			sheet.addRow(data).commit();
+		}
+	}
+}
+
+// Export Letters
+function exportLetters(sheet: Worksheet, subjects: Parsed.Letter[]) {
+	for (const subject of subjects) {
+		for (const task of subject.tasks) {
+			const data = {
+				subject: subject.name,
+				task: task.name,
+				letter: task.grade[0],
+				number: task.grade[1]
+			};
+
+			const row = sheet.addRow(data);
+			row.getCell('number').numFmt = '0.00';
 			row.commit();
 		}
 	}
+}
 
-	// Summary Sheet
-	const sheetSum = workbook.addWorksheet('Summary', {
+// Create Summary
+function createSummary(workbook: Workbook) {
+	const summarySheet = workbook.addWorksheet('Summary', {
 		views: [{ state: 'frozen', ySplit: 1 }]
 	});
-	sheetSum.columns = [
-		{ header: 'Name', key: 'name' },
+	summarySheet.columns = [
+		{ header: 'Type', key: 'type' },
 		{ header: 'Tasks', key: 'tasks' },
 		{ header: 'Average', key: 'avg' }
 	];
 
-	const rowIB = sheetSum.addRow({
-		name: 'IB',
-		tasks: { formula: '=COUNTA(IB!A:A)-1' },
-		avg: { formula: '=AVERAGE(IB!C:F)' }
+	const numberRow = summarySheet.addRow({
+		type: 'Number',
+		tasks: { formula: '=COUNTA(Number!A:A)-1' },
+		avg: { formula: '=AVERAGE(Number!C:F)' }
 	});
-	rowIB.getCell('avg').numFmt = '0.00';
+	numberRow.getCell('avg').numFmt = '0.00';
 
-	const rowSACE = sheetSum.addRow({
-		name: 'SACE',
-		tasks: { formula: '=COUNTA(SACE!A:A)-1' },
-		avg: { formula: '=AVERAGE(SACE!D:D)' }
+	const letterRow = summarySheet.addRow({
+		type: 'Letter',
+		tasks: { formula: '=COUNTA(Letter!A:A)-1' },
+		avg: { formula: '=AVERAGE(Letter!D:D)' }
 	});
-	rowSACE.getCell('avg').numFmt = '0.00';
+	letterRow.getCell('avg').numFmt = '0.00';
+}
 
-	// Autofit Columns
-	[sheetIB, sheetSACE, sheetSum].forEach(sheet => {
+// Autofit Columns
+function autofitColumns(workbook: Workbook) {
+	workbook.eachSheet(sheet => {
 		sheet.eachColumnKey(column => {
 			let width = Math.max(column.width, column.header.length);
 
@@ -280,14 +401,4 @@ const logger = winston.createLogger({
 			column.width = width;
 		});
 	});
-
-	// Save Workbook
-	await workbook.xlsx
-		.writeFile(resolve(__dirname, `${args.file}.xlsx`))
-		.catch(err => logger.error(err));
-	logger.info('exported to excel');
-
-	// Close the Browser
-	await browser.close();
-	logger.info(`browser closed`);
-})();
+}

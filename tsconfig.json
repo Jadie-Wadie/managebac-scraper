@@ -6,7 +6,6 @@
 		"module": "commonjs",
 		"resolveJsonModule": true,
 		"esModuleInterop": true,
-		"lib": ["esnext", "dom"],
-		"baseUrl": "./src"
+		"lib": ["esnext", "dom"]
 	}
 }

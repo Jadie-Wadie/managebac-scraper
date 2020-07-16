@@ -1,8 +1,3 @@
-# Modules
 node_modules
-
-# Env Files
-.env
-
-# Build
 build
+data
