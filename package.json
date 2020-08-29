@@ -26,7 +26,7 @@
 	"homepage": "https://github.com/Jadie-Wadie/managebac-scraper#readme",
 	"dependencies": {
 		"@types/command-line-args": "^5.0.0",
-		"@types/node": "^14.0.23",
+		"@types/node": "^14.6.2",
 		"@types/puppeteer": "^3.0.1",
 		"colors": "^1.4.0",
 		"command-line-args": "^5.1.1",
@@ -34,7 +34,7 @@
 		"nodemon": "^2.0.4",
 		"puppeteer": "^3.3.0",
 		"rimraf": "^3.0.2",
-		"typescript": "^3.9.6",
+		"typescript": "^3.9.7",
 		"winston": "^3.3.3"
 	},
 	"nodemonConfig": {
