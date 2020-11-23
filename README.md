@@ -26,7 +26,17 @@ TARGET_EMAIL=student@school.edu.au
 TARGET_PASS=p455w0rd
 ```
 
+Then, run the `start` script.
+
+```sh
+npm start
+```
+
 To watch Puppeteer's progress, pass the `--debug` flag.
+
+```sh
+npm start -- --debug
+```
 
 The scraper will export to `./export/data.xlsx`.
 
