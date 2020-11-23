@@ -1,16 +1,16 @@
 # ManageBac Scraper
 
-A simple ManageBac scraper, using [Puppeteer](https://pptr.dev/) and [TypeScript](https://www.typescriptlang.org/).
+> A simple ManageBac scraper.
 
 ## Installation
 
 Clone the repository locally using [git](https://git-scm.com/).
 
 ```cmd
-git clone https://github.com/Jadie-Wadie/managebac-scraper.git
+git clone https://github.com/ja1den/managebac-scraper.git
 ```
 
-Install dependencies using [NPM](https://www.npmjs.com/).
+Install the dependencies with [npm](https://www.npmjs.com/).
 
 ```cmd
 npm install
@@ -56,4 +56,4 @@ Paths are resolved relative to the current terminal location.
 
 ## License
 
-[MIT](https://choosealicense.com/licenses/mit/)
+[MIT](LICENSE)

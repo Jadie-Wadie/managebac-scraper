@@ -1,47 +1,53 @@
 {
 	"name": "managebac-scraper",
-	"version": "1.0.0",
-	"description": "A simple ManageBac scraper, using Puppeteer and TypeScript",
-	"main": "build/index.js",
-	"scripts": {
-		"start": "tsc && node .",
-		"dev": "npm run clear && nodemon",
-		"clear": "rimraf ./build"
+	"version": "1.1.0",
+	"private": true,
+	"keywords": [
+		"managebac",
+		"scraper"
+	],
+	"homepage": "https://github.com/ja1den/managebac-scraper#readme",
+	"bugs": {
+		"url": "https://github.com/ja1den/managebac-scraper/issues"
 	},
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/Jadie-Wadie/managebac-scraper.git"
+		"url": "git+https://github.com/ja1den/managebac-scraper.git"
 	},
-	"keywords": [
-		"managebac",
-		"scraper",
-		"puppeteer",
-		"typescript"
-	],
-	"author": "Jadie Wadie",
 	"license": "MIT",
-	"bugs": {
-		"url": "https://github.com/Jadie-Wadie/managebac-scraper/issues"
+	"author": {
+		"name": "Jaiden Douglas",
+		"url": "https://github.com/ja1den"
 	},
-	"homepage": "https://github.com/Jadie-Wadie/managebac-scraper#readme",
-	"dependencies": {
-		"@types/command-line-args": "^5.0.0",
-		"@types/node": "^14.6.2",
-		"@types/puppeteer": "^3.0.1",
-		"colors": "^1.4.0",
-		"command-line-args": "^5.1.1",
-		"exceljs": "^4.1.1",
-		"nodemon": "^2.0.4",
-		"puppeteer": "^3.3.0",
-		"rimraf": "^3.0.2",
-		"typescript": "^3.9.7",
-		"winston": "^3.3.3"
+	"main": "src/index.ts",
+	"scripts": {
+		"lint": "sort-package-json && prettier -wu \"*\"",
+		"start": "ts-node -r dotenv/config .",
+		"watch": "nodemon"
 	},
 	"nodemonConfig": {
+		"exec": "ts-node -r dotenv/config .",
+		"ext": "ts",
 		"watch": [
 			"src"
-		],
-		"ext": "ts",
-		"exec": "tsc && node ."
+		]
+	},
+	"dependencies": {
+		"colors": "^1.4.0",
+		"command-line-args": "^5.1.1",
+		"dotenv": "^8.2.0",
+		"exceljs": "^4.1.1",
+		"puppeteer": "^3.3.0"
+	},
+	"devDependencies": {
+		"@types/command-line-args": "^5.0.0",
+		"@types/node": "^14.14.9",
+		"@types/puppeteer": "^3.0.5",
+		"nodemon": "^2.0.6",
+		"prettier": "^2.2.0",
+		"rimraf": "^3.0.2",
+		"sort-package-json": "^1.48.0",
+		"ts-node": "^9.0.0",
+		"typescript": "^3.9.7"
 	}
 }
