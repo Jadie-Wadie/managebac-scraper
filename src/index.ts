@@ -58,17 +58,17 @@ async function main() {
 	}
 
 	// Workbook
-	let criterion = 0;
+	let criteria = 0;
 
 	for (const subject of subjects) {
 		if (subject.type === 'number') {
 			for (const task of subject.tasks) {
-				criterion = Math.max(criterion, task.grades.length);
+				criteria = Math.max(criteria, task.grades.length);
 			}
 		}
 	}
 
-	const workbook = createWorkbook(criterion);
+	const workbook = createWorkbook(criteria);
 
 	// Export
 	exportNumbers(
@@ -81,7 +81,7 @@ async function main() {
 	);
 
 	// Summary
-	createSummary(workbook);
+	createSummary(workbook, criteria);
 
 	// Autofit
 	autofitColumns(workbook);
@@ -342,7 +342,7 @@ function exportLetters(sheet: Worksheet, subjects: Parsed.Letter[]) {
 }
 
 // Create Summary
-function createSummary(workbook: Workbook) {
+function createSummary(workbook: Workbook, criteria: number) {
 	const summarySheet = workbook.addWorksheet('Summary', {
 		views: [{ state: 'frozen', ySplit: 1 }]
 	});
@@ -353,10 +353,15 @@ function createSummary(workbook: Workbook) {
 		{ header: 'Average', key: 'avg' }
 	];
 
+	const lastCol = String.fromCharCode(67 + criteria - 1);
+	console.log(lastCol);
+
 	const numberRow = summarySheet.addRow({
 		type: 'Number',
 		tasks: { formula: '=COUNTA(Number!A:A)-1' },
-		avg: { formula: '=AVERAGE(Number!C:F)' }
+		avg: {
+			formula: `=AVERAGE(Number!C:${lastCol})`
+		}
 	});
 
 	numberRow.getCell('avg').numFmt = '0.00';
